@@ -262,8 +262,172 @@
     }
   }
 
+  function rrect(ctx, x, y, w, h, rad) {
+    rad = Math.min(rad, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + rad, y); ctx.arcTo(x + w, y, x + w, y + h, rad); ctx.arcTo(x + w, y + h, x, y + h, rad);
+    ctx.arcTo(x, y + h, x, y, rad); ctx.arcTo(x, y, x + w, y, rad); ctx.closePath();
+  }
+
+  // Industrial arm: base, three links, joints and a two-finger gripper. `a` holds joint angles.
+  function arm(ctx, x, y, s, a, c) {
+    ctx.fillStyle = c[1];
+    rrect(ctx, x - s * 0.17, y - s * 0.07, s * 0.34, s * 0.07, s * 0.015); ctx.fill();
+    ctx.fillStyle = c[2];
+    rrect(ctx, x - s * 0.1, y - s * 0.12, s * 0.2, s * 0.06, s * 0.02); ctx.fill();
+    const lens = [s * 0.55, s * 0.45, s * 0.16], widths = [s * 0.12, s * 0.09, s * 0.065];
+    let px = x, py = y - s * 0.1, ang = -Math.PI / 2;
+    const joints = [];
+    ctx.lineCap = "round";
+    for (let i = 0; i < 3; i++) {
+      ang += a[i];
+      const nx = px + Math.cos(ang) * lens[i], ny = py + Math.sin(ang) * lens[i];
+      ctx.strokeStyle = along(c, 0.25 + i * 0.3); ctx.lineWidth = widths[i];
+      ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(nx, ny); ctx.stroke();
+      ctx.strokeStyle = rgba(c[4], 0.35); ctx.lineWidth = widths[i] * 0.12;
+      ctx.beginPath(); ctx.moveTo(px + Math.cos(ang) * widths[i] * 0.6, py + Math.sin(ang) * widths[i] * 0.6);
+      ctx.lineTo(nx - Math.cos(ang) * widths[i] * 0.6, ny - Math.sin(ang) * widths[i] * 0.6); ctx.stroke();
+      joints.push([px, py, widths[i] * 0.72]);
+      px = nx; py = ny;
+    }
+    for (const [jx, jy, jr] of joints) {
+      ctx.fillStyle = c[0]; ctx.strokeStyle = c[4]; ctx.lineWidth = jr * 0.22;
+      ctx.beginPath(); ctx.arc(jx, jy, jr, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = c[3]; ctx.beginPath(); ctx.arc(jx, jy, jr * 0.3, 0, Math.PI * 2); ctx.fill();
+    }
+    // Gripper.
+    const perp = ang + Math.PI / 2, f = s * 0.07, gw = s * 0.022;
+    ctx.strokeStyle = c[4]; ctx.lineWidth = gw;
+    for (const side of [-1, 1]) {
+      const bx = px + Math.cos(perp) * f * 0.7 * side, by = py + Math.sin(perp) * f * 0.7 * side;
+      ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(bx, by);
+      ctx.lineTo(bx + Math.cos(ang) * f, by + Math.sin(ang) * f); ctx.stroke();
+    }
+    return [px, py];
+  }
+
+  function floor(ctx, W, H, c, y) {
+    ctx.fillStyle = rgba(c[0], 0.65); ctx.fillRect(0, y, W, H - y);
+    ctx.strokeStyle = rgba(c[4], 0.08); ctx.lineWidth = W * 0.002;
+    for (let i = -10; i <= 10; i++) { ctx.beginPath(); ctx.moveTo(W / 2 + i * W * 0.04, y); ctx.lineTo(W / 2 + i * W * 0.3, H); ctx.stroke(); }
+    for (let k = 1; k < 8; k++) { const yy = y + (H - y) * Math.pow(k / 8, 1.8); ctx.beginPath(); ctx.moveTo(0, yy); ctx.lineTo(W, yy); ctx.stroke(); }
+  }
+
+  const mono = (W, s) => `600 ${W * s}px ui-monospace, Menlo, monospace`;
+
   // ---- styles ----
   const STYLES = {
+    arm: {
+      name: "Robot Arm",
+      draw(ctx, W, H, c, r) {
+        const g = ctx.createLinearGradient(0, 0, 0, H);
+        g.addColorStop(0, c[0]); g.addColorStop(1, c[1]);
+        ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+        blobs(ctx, W, H, c, r, 2, 0.3);
+        const fy = H * 0.84;
+        floor(ctx, W, H, c, fy);
+        const side = r() < 0.5 ? -1 : 1, bx = W * (0.5 - side * 0.18), s = W * 0.95;
+        // Reach envelope.
+        ctx.strokeStyle = rgba(c[4], 0.14); ctx.lineWidth = W * 0.003; ctx.setLineDash([W * 0.02, W * 0.015]);
+        ctx.beginPath(); ctx.arc(bx, fy - s * 0.1, s * 1.0, Math.PI * 1.05, Math.PI * 1.95); ctx.stroke();
+        ctx.beginPath(); ctx.arc(bx, fy - s * 0.1, s * 0.62, Math.PI * 1.05, Math.PI * 1.95); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.shadowColor = "rgba(0,0,0,.4)"; ctx.shadowBlur = W * 0.04;
+        arm(ctx, bx, fy, s, [side * (0.25 + r() * 0.35), side * (0.9 + r() * 0.6), side * (0.4 + r() * 0.7)], c);
+        ctx.shadowColor = "transparent";
+        ctx.fillStyle = rgba(c[4], 0.7); ctx.font = mono(W, 0.026); ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText(`6-AXIS · PAYLOAD ${8 + Math.floor(r() * 20)} KG · REACH ${(1.2 + r()).toFixed(2)} M`, W / 2, H * 0.92);
+      },
+    },
+    factory: {
+      name: "Factory Line",
+      draw(ctx, W, H, c, r) {
+        ctx.fillStyle = c[0]; ctx.fillRect(0, 0, W, H);
+        blobs(ctx, W, H, c, r, 2, 0.25);
+        for (const [by, s] of [[H * 0.6, W * 0.42], [H * 0.9, W * 0.5]]) {
+          const bh = W * 0.05, tilt = r() * W * 0.1;
+          // Robots behind the belt, leaning over it.
+          for (let i = 0; i < 2; i++) {
+            const side = i ? 1 : -1, x = W * (0.5 - side * 0.27);
+            arm(ctx, x, by - bh * 0.4, s, [side * (0.3 + r() * 0.3), side * (1.5 + r() * 0.6), side * (0.6 + r() * 0.5)], c);
+          }
+          // Belt with rollers.
+          ctx.fillStyle = c[1]; rrect(ctx, -W * 0.05, by, W * 1.1, bh, bh / 2); ctx.fill();
+          ctx.fillStyle = rgba(c[4], 0.25);
+          for (let x = tilt % (bh * 1.2); x < W; x += bh * 1.2) { ctx.beginPath(); ctx.arc(x, by + bh / 2, bh * 0.28, 0, Math.PI * 2); ctx.fill(); }
+          ctx.strokeStyle = c[2]; ctx.lineWidth = W * 0.004; ctx.beginPath(); ctx.moveTo(0, by); ctx.lineTo(W, by); ctx.stroke();
+          // Parts riding the belt.
+          for (let x = W * 0.06 + tilt; x < W; x += W * (0.17 + r() * 0.1)) {
+            const w = W * (0.07 + r() * 0.04), h = w * (0.7 + r() * 0.5);
+            ctx.fillStyle = pick(r, c.slice(2)); rrect(ctx, x, by - h, w, h, w * 0.08); ctx.fill();
+            ctx.fillStyle = rgba(c[0], 0.3); ctx.fillRect(x + w * 0.42, by - h, w * 0.16, h);
+          }
+          // Legs.
+          ctx.fillStyle = c[1];
+          for (let x = W * 0.1; x < W; x += W * 0.3) ctx.fillRect(x, by + bh, W * 0.02, W * 0.08);
+        }
+        ctx.fillStyle = rgba(c[4], 0.55); ctx.font = mono(W, 0.024); ctx.textAlign = "left"; ctx.textBaseline = "middle";
+        ctx.fillText(`LINE ${1 + Math.floor(r() * 9)} · ${120 + Math.floor(r() * 300)} UNITS/HR · AUTO`, W * 0.06, H * 0.42);
+      },
+    },
+    bot: {
+      name: "Robot",
+      draw(ctx, W, H, c, r) {
+        const bg = ctx.createRadialGradient(W / 2, H * 0.58, 0, W / 2, H * 0.58, H * 0.7);
+        bg.addColorStop(0, c[1]); bg.addColorStop(1, c[0]);
+        ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+        // Dot grid.
+        ctx.fillStyle = rgba(c[4], 0.08);
+        for (let y = W * 0.03; y < H; y += W * 0.06) for (let x = W * 0.03; x < W; x += W * 0.06) { ctx.beginPath(); ctx.arc(x, y, W * 0.004, 0, Math.PI * 2); ctx.fill(); }
+        const cx = W / 2, hw = W * 0.56, hh = W * 0.46, hx = cx - hw / 2, hy = H * 0.5;
+        // Shoulders and neck.
+        ctx.fillStyle = c[1]; rrect(ctx, cx - W * 0.42, hy + hh + W * 0.12, W * 0.84, H, W * 0.12); ctx.fill();
+        ctx.fillStyle = c[2]; rrect(ctx, cx - W * 0.09, hy + hh - W * 0.02, W * 0.18, W * 0.16, W * 0.03); ctx.fill();
+        ctx.fillStyle = c[3];
+        for (let i = 0; i < 4; i++) { const lx = cx - W * 0.3 + i * W * 0.06; ctx.beginPath(); ctx.arc(lx, hy + hh + W * 0.24, W * 0.015, 0, Math.PI * 2); ctx.fill(); }
+        // Antennas.
+        const nAnt = 1 + Math.floor(r() * 2);
+        ctx.strokeStyle = c[3]; ctx.lineWidth = W * 0.014; ctx.lineCap = "round";
+        for (let i = 0; i < nAnt; i++) {
+          const ax = nAnt === 1 ? cx : cx + (i ? 1 : -1) * hw * 0.28, top = hy - W * (0.14 + r() * 0.06);
+          ctx.beginPath(); ctx.moveTo(ax, hy); ctx.lineTo(ax, top); ctx.stroke();
+          const glow = ctx.createRadialGradient(ax, top, 0, ax, top, W * 0.08);
+          glow.addColorStop(0, rgba(c[4], 0.8)); glow.addColorStop(1, rgba(c[4], 0));
+          ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(ax, top, W * 0.08, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = c[4]; ctx.beginPath(); ctx.arc(ax, top, W * 0.025, 0, Math.PI * 2); ctx.fill();
+        }
+        // Ears.
+        ctx.fillStyle = c[2];
+        for (const sd of [-1, 1]) { rrect(ctx, cx + sd * hw / 2 - W * 0.04 + sd * W * 0.02, hy + hh * 0.3, W * 0.08, hh * 0.4, W * 0.025); ctx.fill(); }
+        // Head.
+        ctx.shadowColor = "rgba(0,0,0,.45)"; ctx.shadowBlur = W * 0.06;
+        const hg = ctx.createLinearGradient(0, hy, 0, hy + hh);
+        hg.addColorStop(0, c[3]); hg.addColorStop(1, c[2]);
+        ctx.fillStyle = hg; rrect(ctx, hx, hy, hw, hh, W * 0.09); ctx.fill();
+        ctx.shadowColor = "transparent";
+        // Face screen.
+        const fx = hx + hw * 0.1, fy = hy + hh * 0.14, fw = hw * 0.8, fh = hh * 0.72;
+        ctx.fillStyle = c[0]; rrect(ctx, fx, fy, fw, fh, W * 0.06); ctx.fill();
+        ctx.fillStyle = c[4]; ctx.shadowColor = c[4]; ctx.shadowBlur = W * 0.04;
+        const eyeY = fy + fh * 0.42, ex = fw * 0.24, kind = Math.floor(r() * 3);
+        for (const sd of [-1, 1]) {
+          const x = cx + sd * ex;
+          if (kind === 0) { ctx.beginPath(); ctx.arc(x, eyeY, fw * 0.09, 0, Math.PI * 2); ctx.fill(); }
+          else if (kind === 1) { rrect(ctx, x - fw * 0.11, eyeY - fw * 0.03, fw * 0.22, fw * 0.06, fw * 0.03); ctx.fill(); }
+          else { ctx.lineWidth = fw * 0.045; ctx.strokeStyle = c[4]; ctx.beginPath(); ctx.arc(x, eyeY + fw * 0.04, fw * 0.08, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke(); }
+        }
+        ctx.lineWidth = fw * 0.03; ctx.strokeStyle = c[4]; ctx.lineCap = "round";
+        ctx.beginPath(); ctx.arc(cx, fy + fh * 0.6, fw * 0.12, Math.PI * 0.2, Math.PI * 0.8); ctx.stroke();
+        ctx.shadowColor = "transparent";
+        // Bolts.
+        ctx.fillStyle = rgba(c[0], 0.5);
+        for (const [bx, by] of [[hx + W * 0.04, hy + W * 0.04], [hx + hw - W * 0.04, hy + W * 0.04], [hx + W * 0.04, hy + hh - W * 0.04], [hx + hw - W * 0.04, hy + hh - W * 0.04]]) {
+          ctx.beginPath(); ctx.arc(bx, by, W * 0.012, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.fillStyle = rgba(c[4], 0.6); ctx.font = mono(W, 0.026); ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText(`UNIT ${String(Math.floor(r() * 999)).padStart(3, "0")} · ONLINE`, cx, hy + hh + W * 0.33);
+      },
+    },
     gears: {
       name: "Gears",
       draw(ctx, W, H, c, r) {
@@ -506,9 +670,9 @@
   $("size").textContent = `${W} × ${H} px`;
 
   // ---- state ----
-  let state = { style: "gears", pal: 0, seed: 7, grain: true, clock: true, quote: "", qfont: "serif" };
-  try { Object.assign(state, JSON.parse(localStorage.getItem("wallpaper-lab-2") || "{}")); } catch {}
-  const persist = () => { try { localStorage.setItem("wallpaper-lab-2", JSON.stringify(state)); } catch {} };
+  let state = { style: "arm", pal: 0, seed: 7, grain: true, clock: true, quote: "", qfont: "serif" };
+  try { Object.assign(state, JSON.parse(localStorage.getItem("wallpaper-lab-3") || "{}")); } catch {}
+  const persist = () => { try { localStorage.setItem("wallpaper-lab-3", JSON.stringify(state)); } catch {} };
 
   function render() {
     const c = PALETTES[state.pal].c;

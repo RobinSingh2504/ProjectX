@@ -1,6 +1,6 @@
 # Wallpaper Lab
 
-A wallpaper maker that runs in Safari on your iPhone. It draws wallpapers at your phone's exact screen resolution in six styles (Aurora, Gradient, Waves, Halftone, Shapes, Quote) and eight color palettes.
+A wallpaper maker that runs in Safari on your iPhone. It draws wallpapers at your phone's exact screen resolution in nine styles (Gears, Blueprint, Circuit, Aurora, Gradient, Waves, Halftone, Shapes, Quote) and eight color palettes.
 
 ## Use it
 

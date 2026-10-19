@@ -4,9 +4,9 @@ A wallpaper maker that runs in Safari on your iPhone. It draws wallpapers at you
 
 ## Use it
 
-1. Open `index.html` in Safari (see "Put it online" below).
+1. Open the app in Safari (see "Put it online" below). Saving doesn't work inside the Claude app preview.
 2. Pick a style and colors, then tap **Shuffle** until you like it.
-3. Tap **Save wallpaper**, press and hold the image, then tap **Save to Photos**.
+3. Tap **Save to Photos**, then tap **Save Image** in the share sheet.
 4. In Photos, tap Share, then **Use as Wallpaper**.
 
 Tip: in Safari, tap Share, then **Add to Home Screen** to open it like an app.

@@ -131,6 +131,8 @@
   }
   .sheet p { margin: 0; text-align: center; color: var(--muted); }
   .sheet p b { color: var(--fg); }
+  .blocked { display: grid; gap: 10px; justify-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 14px; }
+  .blocked .btn { text-decoration: none; text-align: center; width: 100%; }
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>
@@ -151,7 +153,7 @@
     </div>
     <div class="actions">
       <button class="btn" id="shuffle" type="button">Shuffle</button>
-      <button class="btn primary" id="save" type="button">Save wallpaper</button>
+      <button class="btn primary" id="save" type="button">Save to Photos</button>
     </div>
   </section>
 
@@ -182,10 +184,13 @@
 <div class="sheet" id="sheet" hidden>
   <div class="sheet-inner">
     <img id="out" alt="Your wallpaper">
-    <p><b>Press and hold the image</b>, then tap <b>Save to Photos</b>.<br>Open Photos, tap Share, then <b>Use as Wallpaper</b>.</p>
+    <div class="blocked" id="blocked" hidden>
+      <p><b>Saving is blocked in this preview.</b> Apps like Claude show pages in a locked frame that can't save photos. Open Wallpaper Lab in Safari and saving takes one tap:</p>
+      <a class="btn primary" href="https://robinsingh2504.github.io/ProjectX/" target="_blank" rel="noopener">Open in Safari</a>
+    </div>
+    <p>Then tap <b>Save Image</b>. In Photos, tap Share, then <b>Use as Wallpaper</b>.<br>Or press and hold the image and tap <b>Save to Photos</b>.</p>
     <div class="actions">
       <button class="btn" id="close" type="button">Done</button>
-      <button class="btn primary" id="share" type="button" hidden>Share…</button>
     </div>
   </div>
 </div>
@@ -683,6 +688,7 @@
     document.documentElement.style.setProperty("--accent", c[3]);
     syncUI();
     persist();
+    prepare();
   }
 
   // ---- UI ----
@@ -737,21 +743,31 @@
   tick(); setInterval(tick, 15000);
 
   // ---- save ----
-  let file, url;
-  $("save").onclick = () => {
-    cv.toBlob((blob) => {
-      if (!blob) return;
-      if (url) URL.revokeObjectURL(url);
-      url = URL.createObjectURL(blob);
-      file = new File([blob], `wallpaper-${state.style}.png`, { type: "image/png" });
-      $("out").src = url;
-      let canShare = false;
-      try { canShare = !!(navigator.canShare && navigator.canShare({ files: [file] })); } catch {}
-      $("share").hidden = !canShare;
-      $("sheet").hidden = false;
-    }, "image/png");
+  // The PNG is prepared right after each change so the Save tap can open the
+  // share sheet immediately (iOS only allows it directly inside the tap).
+  let file, prepTimer;
+  function prepare() {
+    clearTimeout(prepTimer);
+    file = null;
+    prepTimer = setTimeout(() => cv.toBlob((blob) => {
+      if (blob) file = new File([blob], `wallpaper-${state.style}.png`, { type: "image/png" });
+    }, "image/png"), 250);
+  }
+  const canShareFiles = () => {
+    try { return !!(file && navigator.canShare && navigator.canShare({ files: [file] })); } catch { return false; }
   };
-  $("share").onclick = () => { navigator.share({ files: [file] }).catch(() => {}); };
+  function showSheet(blocked) {
+    $("out").src = cv.toDataURL("image/png");
+    $("blocked").hidden = !blocked;
+    $("sheet").hidden = false;
+  }
+  $("save").onclick = () => {
+    if (canShareFiles()) {
+      navigator.share({ files: [file] }).catch((e) => { if (e && e.name !== "AbortError") showSheet(true); });
+    } else {
+      showSheet(!navigator.share);
+    }
+  };
   $("close").onclick = () => { $("sheet").hidden = true; };
 
   render();

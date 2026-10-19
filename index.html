@@ -1,0 +1,486 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Wallpaper Lab</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Wallpaper Lab">
+<meta name="theme-color" content="#0e0f14">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Syne:wght@600;800&family=Figtree:wght@400;500;600&family=Fraunces:ital,opsz,wght@1,9..144,500&display=swap">
+<style>
+  /* Layout: phone-shaped live preview on top (left on wide screens), a stack of controls beneath it.
+     Single dark look by choice, like a photo editor, so the wallpaper colors carry the page. */
+  :root {
+    --bg: #0e0f14;
+    --panel: #171922;
+    --line: #2a2d3a;
+    --fg: #eceaf2;
+    --muted: #9a98a8;
+    --accent: #cbf3f0; /* replaced by the active palette's light color */
+    --display: "Syne", "Avenir Next", system-ui, sans-serif;
+    --body: "Figtree", system-ui, -apple-system, sans-serif;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { min-height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font: 15px/1.45 var(--body);
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    -webkit-tap-highlight-color: transparent;
+  }
+  .app {
+    max-width: 980px;
+    margin: 0 auto;
+    padding-block: 16px 40px;
+    display: grid;
+    gap: 22px;
+  }
+  @media (min-width: 760px) {
+    .app { grid-template-columns: minmax(0, 360px) minmax(0, 1fr); gap: 40px; padding-top: 32px; }
+    .stage { position: sticky; top: 24px; align-self: start; }
+  }
+  header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  h1 {
+    font: 800 28px/1 var(--display);
+    letter-spacing: -0.02em;
+    margin: 0;
+  }
+  h1 span { color: var(--accent); transition: color .4s; }
+  .size { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; letter-spacing: .04em; }
+
+  .stage { display: grid; gap: 14px; justify-items: center; }
+  .frame {
+    position: relative;
+    width: min(100%, calc(60svh * var(--ar, 0.4613)), 340px);
+    aspect-ratio: var(--ar, 0.4613);
+    border-radius: 44px / 44px;
+    overflow: hidden;
+    background: #000;
+    box-shadow: 0 0 0 6px #050507, 0 0 0 7px var(--line), 0 30px 60px -20px rgba(0,0,0,.7);
+    container-type: inline-size;
+  }
+  .frame canvas { width: 100%; height: 100%; display: block; }
+  .lock {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; align-items: center;
+    padding-top: 14cqw;
+    color: rgba(255,255,255,.92);
+    text-shadow: 0 1px 12px rgba(0,0,0,.25);
+    pointer-events: none;
+    font-family: -apple-system, "SF Pro Rounded", system-ui, sans-serif;
+  }
+  .lock .date { font-size: 5cqw; font-weight: 600; }
+  .lock .time { font-size: 26cqw; font-weight: 700; line-height: 1; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  .lock .bar { margin-top: auto; margin-bottom: 3cqw; width: 36%; height: 1.4cqw; border-radius: 1cqw; background: rgba(255,255,255,.85); }
+
+  .actions { display: flex; gap: 10px; width: min(100%, 340px); }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .btn {
+    flex: 1; border: 1px solid var(--line); background: var(--panel);
+    padding: 13px 14px; border-radius: 14px; font-weight: 600;
+  }
+  .btn.primary { background: var(--accent); color: #0e0f14; border-color: transparent; transition: background .4s; }
+  .btn:active { transform: scale(.98); }
+
+  .controls { display: grid; gap: 22px; min-width: 0; }
+  .group { display: grid; gap: 10px; }
+  .label { font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip {
+    border: 1px solid var(--line); background: transparent;
+    padding: 9px 14px; border-radius: 999px; font-weight: 500;
+  }
+  .chip[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+  .swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 10px; }
+  .swatch {
+    border: 0; padding: 0; background: none; display: grid; gap: 6px; text-align: left;
+    font-size: 12px; color: var(--muted);
+  }
+  .swatch .strip { display: flex; height: 40px; border-radius: 10px; overflow: hidden; outline: 2px solid transparent; outline-offset: 2px; }
+  .swatch .strip i { flex: 1; }
+  .swatch[aria-pressed="true"] .strip { outline-color: var(--fg); }
+  .swatch[aria-pressed="true"] { color: var(--fg); }
+  .toggles { display: flex; flex-wrap: wrap; gap: 8px; }
+  textarea {
+    width: 100%; min-height: 76px; resize: vertical;
+    background: var(--panel); color: var(--fg);
+    border: 1px solid var(--line); border-radius: 12px;
+    padding: 12px; font: 16px/1.4 var(--body);
+  }
+
+  .sheet {
+    position: fixed; inset: 0; z-index: 20;
+    background: rgba(5,5,8,.86);
+    -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+    display: grid; place-items: center;
+    padding: max(20px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(20px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+  }
+  .sheet-inner { display: grid; gap: 14px; justify-items: center; width: min(100%, 360px); }
+  .sheet img {
+    width: auto; max-width: 70%; max-height: 58svh; border-radius: 20px;
+    -webkit-touch-callout: default; -webkit-user-select: auto; user-select: auto;
+  }
+  .sheet p { margin: 0; text-align: center; color: var(--muted); }
+  .sheet p b { color: var(--fg); }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<main class="app">
+  <section class="stage" aria-label="Preview">
+    <header style="width:min(100%,340px)">
+      <h1>Wallpaper <span>Lab</span></h1>
+      <span class="size" id="size"></span>
+    </header>
+    <div class="frame" id="frame">
+      <canvas id="cv" aria-label="Wallpaper preview"></canvas>
+      <div class="lock" id="lock">
+        <div class="date" id="date"></div>
+        <div class="time" id="time"></div>
+        <div class="bar"></div>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="btn" id="shuffle" type="button">Shuffle</button>
+      <button class="btn primary" id="save" type="button">Save wallpaper</button>
+    </div>
+  </section>
+
+  <section class="controls">
+    <div class="group">
+      <div class="label">Style</div>
+      <div class="chips" id="styles"></div>
+    </div>
+    <div class="group">
+      <div class="label">Colors</div>
+      <div class="swatches" id="palettes"></div>
+    </div>
+    <div class="group" id="quoteGroup" hidden>
+      <div class="label"><label for="quote">Your words</label></div>
+      <textarea id="quote" maxlength="140"></textarea>
+      <div class="chips" id="qfonts"></div>
+    </div>
+    <div class="group">
+      <div class="label">Options</div>
+      <div class="toggles">
+        <button class="chip" id="grain" type="button" aria-pressed="true">Film grain</button>
+        <button class="chip" id="clock" type="button" aria-pressed="true">Show lock screen</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div class="sheet" id="sheet" hidden>
+  <div class="sheet-inner">
+    <img id="out" alt="Your wallpaper">
+    <p><b>Press and hold the image</b>, then tap <b>Save to Photos</b>.<br>Open Photos, tap Share, then <b>Use as Wallpaper</b>.</p>
+    <div class="actions">
+      <button class="btn" id="close" type="button">Done</button>
+      <button class="btn primary" id="share" type="button" hidden>Share…</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const PALETTES = [
+    { name: "Lagoon",  c: ["#0b1d3a", "#0f5e7a", "#2ec4b6", "#cbf3f0", "#ffbf69"] },
+    { name: "Ember",   c: ["#1a0b0b", "#7a1c1c", "#e4572e", "#f3a712", "#ffe8c2"] },
+    { name: "Orchid",  c: ["#160f29", "#4b2a6b", "#b5179e", "#f72585", "#ffd6ec"] },
+    { name: "Moss",    c: ["#0f1a12", "#2d4a2b", "#7d9d5a", "#d8e4b8", "#f4f1de"] },
+    { name: "Glacier", c: ["#0d1321", "#1d2d44", "#3e5c76", "#748cab", "#f0ebd8"] },
+    { name: "Citrus",  c: ["#1b1b1e", "#ff6b35", "#f7c548", "#c5d86d", "#fffbeb"] },
+    { name: "Dusk",    c: ["#14121f", "#3d2c5e", "#a2678a", "#e0a96d", "#fde2c2"] },
+    { name: "Mono",    c: ["#0a0a0a", "#2b2b2b", "#6b6b6b", "#bdbdbd", "#f5f5f5"] },
+  ];
+
+  // ---- helpers ----
+  const rng = (seed) => () => {
+    seed |= 0; seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const hex = (h) => { const n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+  const rgba = (h, a) => `rgba(${hex(h).join(",")},${a})`;
+  const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+  // Interpolate across the palette's four non-base colors, t in 0..1.
+  const along = (c, t) => {
+    const cols = c.slice(1), p = clamp(t) * (cols.length - 1), i = Math.min(cols.length - 2, Math.floor(p)), f = p - i;
+    const a = hex(cols[i]), b = hex(cols[i + 1]);
+    return `rgb(${a.map((v, k) => Math.round(v + (b[k] - v) * f)).join(",")})`;
+  };
+  const pick = (r, arr) => arr[Math.floor(r() * arr.length)];
+
+  function blobs(ctx, W, H, c, r, n, alpha) {
+    ctx.globalCompositeOperation = "screen";
+    for (let i = 0; i < n; i++) {
+      const x = r() * W, y = r() * H, rad = (0.35 + r() * 0.55) * Math.max(W, H);
+      const col = c[1 + Math.floor(r() * 4)];
+      const g = ctx.createRadialGradient(x, y, 0, x, y, rad);
+      g.addColorStop(0, rgba(col, alpha));
+      g.addColorStop(1, rgba(col, 0));
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, W, H);
+    }
+    ctx.globalCompositeOperation = "source-over";
+  }
+
+  function linear(ctx, W, H, c, r) {
+    const a = r() * Math.PI, len = Math.hypot(W, H) / 2, cx = W / 2, cy = H / 2;
+    const g = ctx.createLinearGradient(cx - Math.cos(a) * len, cy - Math.sin(a) * len, cx + Math.cos(a) * len, cy + Math.sin(a) * len);
+    const cols = c.slice(1).sort(() => r() - 0.5).slice(0, 3);
+    cols.forEach((col, i) => g.addColorStop(i / (cols.length - 1), col));
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  // ---- styles ----
+  const STYLES = {
+    aurora: {
+      name: "Aurora",
+      draw(ctx, W, H, c, r) {
+        ctx.fillStyle = c[0]; ctx.fillRect(0, 0, W, H);
+        blobs(ctx, W, H, c, r, 6, 0.6);
+      },
+    },
+    gradient: {
+      name: "Gradient",
+      draw(ctx, W, H, c, r) {
+        linear(ctx, W, H, c, r);
+        blobs(ctx, W, H, c, r, 2, 0.35);
+      },
+    },
+    waves: {
+      name: "Waves",
+      draw(ctx, W, H, c, r) {
+        const g = ctx.createLinearGradient(0, 0, 0, H);
+        g.addColorStop(0, c[0]); g.addColorStop(1, c[1]);
+        ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+        const n = 7;
+        for (let i = 0; i < n; i++) {
+          const base = H * (0.32 + 0.095 * i), amp = H * (0.015 + r() * 0.035);
+          const f1 = ((1 + r() * 1.5) * Math.PI * 2) / W, f2 = ((2 + r() * 3) * Math.PI * 2) / W;
+          const p1 = r() * 6.28, p2 = r() * 6.28;
+          ctx.beginPath();
+          ctx.moveTo(0, H);
+          for (let x = 0; x <= W + 1; x += W / 120) {
+            ctx.lineTo(x, base + Math.sin(x * f1 + p1) * amp + Math.sin(x * f2 + p2) * amp * 0.4);
+          }
+          ctx.lineTo(W, H);
+          ctx.closePath();
+          ctx.fillStyle = along(c, i / (n - 1));
+          ctx.globalAlpha = 0.94;
+          ctx.fill();
+          ctx.globalAlpha = 1;
+        }
+      },
+    },
+    dots: {
+      name: "Halftone",
+      draw(ctx, W, H, c, r) {
+        ctx.fillStyle = c[0]; ctx.fillRect(0, 0, W, H);
+        const s = W / 17, fx = r() * W, fy = r() * H, max = Math.hypot(W, H);
+        let row = 0;
+        for (let y = s / 2; y < H + s; y += s * 0.87, row++) {
+          for (let x = (row % 2 ? s : s / 2); x < W + s; x += s) {
+            const d = Math.hypot(x - fx, y - fy) / max;
+            const rad = s * 0.47 * Math.max(0.05, 1 - d * 1.5);
+            ctx.fillStyle = along(c, d * 1.4);
+            ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI * 2); ctx.fill();
+          }
+        }
+      },
+    },
+    shapes: {
+      name: "Shapes",
+      draw(ctx, W, H, c, r) {
+        const cols = 4, cell = W / cols, rows = Math.ceil(H / cell);
+        for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
+          const x = i * cell, y = j * cell;
+          const bg = r() < 0.45 ? c[0] : pick(r, c);
+          let fg = pick(r, c); if (fg === bg) fg = c[(c.indexOf(bg) + 2) % c.length];
+          ctx.fillStyle = bg; ctx.fillRect(x, y, cell + 1, cell + 1);
+          ctx.fillStyle = fg;
+          ctx.beginPath();
+          const k = Math.floor(r() * 5), rot = Math.floor(r() * 4) * Math.PI / 2;
+          ctx.save(); ctx.translate(x + cell / 2, y + cell / 2); ctx.rotate(rot);
+          const h = cell / 2;
+          if (k === 0) { ctx.moveTo(-h, -h); ctx.arc(-h, -h, cell, 0, Math.PI / 2); }
+          else if (k === 1) { ctx.arc(0, h, h, Math.PI, 0); }
+          else if (k === 2) { ctx.arc(0, 0, h * 0.72, 0, Math.PI * 2); }
+          else if (k === 3) { ctx.moveTo(-h, -h); ctx.lineTo(h, -h); ctx.lineTo(-h, h); }
+          ctx.closePath(); ctx.fill(); ctx.restore();
+        }
+      },
+    },
+    quote: {
+      name: "Quote",
+      draw(ctx, W, H, c, r, s) {
+        ctx.fillStyle = c[0]; ctx.fillRect(0, 0, W, H);
+        blobs(ctx, W, H, c, r, 4, 0.45);
+        const serif = s.qfont === "serif";
+        const fs = W * (serif ? 0.082 : 0.074);
+        ctx.font = serif ? `italic 500 ${fs}px Fraunces, Georgia, serif` : `800 ${fs}px Syne, "Avenir Next", sans-serif`;
+        ctx.fillStyle = c[4];
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        const text = (s.quote || "").trim() || "Small steps still move you forward.";
+        const lines = wrap(ctx, serif ? text : text.toUpperCase(), W * 0.78);
+        const lh = fs * 1.2, top = H * 0.6 - ((lines.length - 1) * lh) / 2;
+        ctx.shadowColor = rgba(c[0], 0.5); ctx.shadowBlur = fs * 0.6;
+        lines.forEach((l, i) => ctx.fillText(l, W / 2, top + i * lh));
+        ctx.shadowBlur = 0;
+      },
+    },
+  };
+
+  function wrap(ctx, text, maxW) {
+    const lines = []; let line = "";
+    for (const w of text.split(/\s+/)) {
+      const test = line ? line + " " + w : w;
+      if (ctx.measureText(test).width > maxW && line) { lines.push(line); line = w; } else line = test;
+    }
+    if (line) lines.push(line);
+    return lines;
+  }
+
+  let grainTile;
+  function grain(ctx, W, H) {
+    if (!grainTile) {
+      grainTile = document.createElement("canvas");
+      grainTile.width = grainTile.height = 180;
+      const g = grainTile.getContext("2d"), img = g.createImageData(180, 180);
+      for (let i = 0; i < img.data.length; i += 4) {
+        const v = Math.random() * 255;
+        img.data[i] = img.data[i + 1] = img.data[i + 2] = v; img.data[i + 3] = 255;
+      }
+      g.putImageData(img, 0, 0);
+    }
+    ctx.save();
+    ctx.globalAlpha = 0.07;
+    ctx.globalCompositeOperation = "overlay";
+    ctx.fillStyle = ctx.createPattern(grainTile, "repeat");
+    ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+  }
+
+  // ---- screen size: the real pixel size of this phone, or an iPhone 15 on desktop ----
+  const dpr = Math.min(window.devicePixelRatio || 1, 3);
+  let sw = screen.width, sh = screen.height;
+  if (sw > sh) [sw, sh] = [sh, sw];
+  const phone = /iPhone|iPod|Android/i.test(navigator.userAgent);
+  const W = phone ? Math.round(sw * dpr) : 1179;
+  const H = phone ? Math.round(sh * dpr) : 2556;
+
+  const $ = (id) => document.getElementById(id);
+  const cv = $("cv"), ctx = cv.getContext("2d");
+  cv.width = W; cv.height = H;
+  $("frame").style.setProperty("--ar", (W / H).toFixed(4));
+  $("size").textContent = `${W} × ${H} px`;
+
+  // ---- state ----
+  let state = { style: "aurora", pal: 0, seed: 7, grain: true, clock: true, quote: "", qfont: "serif" };
+  try { Object.assign(state, JSON.parse(localStorage.getItem("wallpaper-lab") || "{}")); } catch {}
+  const persist = () => { try { localStorage.setItem("wallpaper-lab", JSON.stringify(state)); } catch {} };
+
+  function render() {
+    const c = PALETTES[state.pal].c;
+    ctx.save();
+    STYLES[state.style].draw(ctx, W, H, c, rng(state.seed), state);
+    ctx.restore();
+    if (state.grain) grain(ctx, W, H);
+    document.documentElement.style.setProperty("--accent", c[3]);
+    syncUI();
+    persist();
+  }
+
+  // ---- UI ----
+  const styleWrap = $("styles");
+  for (const [key, s] of Object.entries(STYLES)) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "chip"; b.textContent = s.name; b.dataset.key = key;
+    b.onclick = () => { state.style = key; render(); };
+    styleWrap.append(b);
+  }
+  const palWrap = $("palettes");
+  PALETTES.forEach((p, i) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "swatch"; b.dataset.i = i;
+    b.innerHTML = `<span class="strip">${p.c.map((col) => `<i style="background:${col}"></i>`).join("")}</span>${p.name}`;
+    b.onclick = () => { state.pal = i; render(); };
+    palWrap.append(b);
+  });
+  const qWrap = $("qfonts");
+  [["serif", "Elegant"], ["bold", "Bold"]].forEach(([k, label]) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "chip"; b.textContent = label; b.dataset.key = k;
+    b.onclick = () => { state.qfont = k; render(); };
+    qWrap.append(b);
+  });
+
+  const quote = $("quote");
+  quote.value = state.quote;
+  quote.placeholder = "Small steps still move you forward.";
+  quote.addEventListener("input", () => { state.quote = quote.value; render(); });
+
+  $("grain").onclick = () => { state.grain = !state.grain; render(); };
+  $("clock").onclick = () => { state.clock = !state.clock; render(); };
+  $("shuffle").onclick = () => { state.seed = Math.floor(Math.random() * 1e9); render(); };
+
+  function syncUI() {
+    for (const b of styleWrap.children) b.setAttribute("aria-pressed", b.dataset.key === state.style);
+    for (const b of palWrap.children) b.setAttribute("aria-pressed", +b.dataset.i === state.pal);
+    for (const b of qWrap.children) b.setAttribute("aria-pressed", b.dataset.key === state.qfont);
+    $("grain").setAttribute("aria-pressed", state.grain);
+    $("clock").setAttribute("aria-pressed", state.clock);
+    $("lock").hidden = !state.clock;
+    $("quoteGroup").hidden = state.style !== "quote";
+  }
+
+  // Lock screen clock overlay (preview only, never saved into the image).
+  function tick() {
+    const d = new Date();
+    $("time").textContent = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }).replace(/\s?[AP]M$/i, "");
+    $("date").textContent = d.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" });
+  }
+  tick(); setInterval(tick, 15000);
+
+  // ---- save ----
+  let file, url;
+  $("save").onclick = () => {
+    cv.toBlob((blob) => {
+      if (!blob) return;
+      if (url) URL.revokeObjectURL(url);
+      url = URL.createObjectURL(blob);
+      file = new File([blob], `wallpaper-${state.style}.png`, { type: "image/png" });
+      $("out").src = url;
+      let canShare = false;
+      try { canShare = !!(navigator.canShare && navigator.canShare({ files: [file] })); } catch {}
+      $("share").hidden = !canShare;
+      $("sheet").hidden = false;
+    }, "image/png");
+  };
+  $("share").onclick = () => { navigator.share({ files: [file] }).catch(() => {}); };
+  $("close").onclick = () => { $("sheet").hidden = true; };
+
+  render();
+  // Redraw once the web fonts arrive so the Quote style uses them.
+  if (document.fonts) {
+    Promise.all([
+      document.fonts.load("italic 500 40px Fraunces"),
+      document.fonts.load("800 40px Syne"),
+    ]).then(render).catch(() => {});
+  }
+})();
+</script>
+</body>
+</html>
